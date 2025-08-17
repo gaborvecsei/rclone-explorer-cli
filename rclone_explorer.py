@@ -199,6 +199,73 @@ def check_rclone() -> bool:
         return False
 
 
+def get_available_remotes() -> List[str]:
+    """Get list of available rclone remotes"""
+    try:
+        result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True, check=True)
+        remotes = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+        return remotes
+    except subprocess.CalledProcessError:
+        return []
+
+
+def select_remote_interactive() -> Optional[str]:
+    """Interactive remote selection using curses"""
+    remotes = get_available_remotes()
+
+    if not remotes:
+        print("No rclone remotes found. Please configure remotes with 'rclone config'.", file=sys.stderr)
+        return None
+
+    def remote_selector(stdscr):
+        curses.curs_set(0)
+        stdscr.keypad(True)
+        selected_index = 0
+
+        while True:
+            stdscr.clear()
+            height, width = stdscr.getmaxyx()
+
+            # Title
+            title = "Select rclone remote:"
+            stdscr.addstr(0, 0, title, curses.A_BOLD)
+
+            # Instructions
+            instructions = "Use arrow keys to navigate, ENTER to select, 'q' to quit"
+            stdscr.addstr(1, 0, instructions)
+
+            # Remote list
+            start_row = 3
+            for i, remote in enumerate(remotes):
+                if start_row + i >= height - 1:
+                    break
+
+                # Remove trailing colon for display
+                display_name = remote.rstrip(':')
+                attr = curses.A_REVERSE if i == selected_index else curses.A_NORMAL
+
+                try:
+                    stdscr.addstr(start_row + i, 2, f"{display_name}", attr)
+                except curses.error:
+                    pass
+
+            stdscr.refresh()
+
+            # Handle input
+            key = stdscr.getch()
+
+            if key == ord('q') or key == 27:    # 'q' or ESC
+                return None
+            elif key == curses.KEY_UP and selected_index > 0:
+                selected_index -= 1
+            elif key == curses.KEY_DOWN and selected_index < len(remotes) - 1:
+                selected_index += 1
+            elif key == curses.KEY_ENTER or key == 10 or key == 13:    # Enter
+                return remotes[selected_index]
+
+    return curses.wrapper(remote_selector)
+
+
 def parse_remote_path(remote_arg: str) -> str:
     """Parse and validate remote path argument"""
     if not remote_arg:
@@ -222,8 +289,12 @@ Examples:
   rclone_explorer.py --max-items 20 my_storage:/docs
         """)
 
-    parser.add_argument("remote",
-                        help="Remote storage and optional path (e.g., 'my_storage:' or 'my_storage:/backup/Media')")
+    parser.add_argument(
+        "remote",
+        nargs='?',
+        help=
+        "Remote storage and optional path (e.g., 'my_storage:' or 'my_storage:/backup/Media'). If not provided, you'll be prompted to select from available remotes."
+    )
 
     parser.add_argument("--max-items",
                         "-m",
@@ -239,7 +310,16 @@ Examples:
         sys.exit(1)
 
     try:
-        remote_path = parse_remote_path(args.remote)
+        # If no remote provided, let user select interactively
+        if args.remote is None:
+            selected_remote = select_remote_interactive()
+            if selected_remote is None:
+                print("No remote selected. Exiting.")
+                sys.exit(0)
+            remote_path = selected_remote
+        else:
+            remote_path = parse_remote_path(args.remote)
+
         explorer = RcloneExplorer(remote_path, args.max_items)
         curses.wrapper(explorer.run)
     except KeyboardInterrupt:
