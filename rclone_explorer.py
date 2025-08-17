@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-rclone_explorer - An ncdu-like explorer for rclone storages
-"""
-
 import argparse
 import curses
 import json
@@ -12,7 +7,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 class RcloneItem:
-    """Represents a file or directory from rclone"""
 
     def __init__(self, name: str, size: int, is_dir: bool, mod_time: str = ""):
         self.name: str = name
@@ -25,7 +19,6 @@ class RcloneItem:
 
 
 class RcloneExplorer:
-    """Main rclone explorer class"""
 
     def __init__(self, remote_path: str, max_items: int = 10):
         self.remote_path: str = remote_path
@@ -36,11 +29,9 @@ class RcloneExplorer:
         self.path_stack: List[str] = []
 
     def get_remote_items(self, path: str = "") -> List[RcloneItem]:
-        """Get items from rclone ls command"""
         full_path = f"{self.remote_path}{path}"
 
         try:
-            # Use rclone lsjson for detailed information
             result = subprocess.run(["rclone", "lsjson", full_path], capture_output=True, text=True, check=True)
 
             items = []
@@ -54,7 +45,6 @@ class RcloneExplorer:
 
                 items.append(RcloneItem(name, size, is_dir, mod_time))
 
-            # Sort: directories first, then by name
             items.sort(key=lambda x: (not x.is_dir, x.name.lower()))
 
             return items
@@ -65,7 +55,6 @@ class RcloneExplorer:
             return []
 
     def format_size(self, size_bytes: int) -> str:
-        """Format size in human readable format"""
         if size_bytes == 0:
             return "0 B"
 
@@ -83,20 +72,16 @@ class RcloneExplorer:
             return f"{size:.1f} {units[unit_index]}"
 
     def draw_screen(self, stdscr):
-        """Draw the main screen"""
         stdscr.clear()
         height, width = stdscr.getmaxyx()
 
-        # Title
         title = f"rclone explorer - {self.remote_path}{self.current_path}"
         stdscr.addstr(0, 0, title[:width - 1], curses.A_BOLD)
 
-        # Navigation info
         nav_info = "Press ENTER to open, 'q' to quit, 'b' to go back"
         if len(nav_info) < width:
             stdscr.addstr(1, 0, nav_info)
 
-        # Items
         start_row = 3
         items_to_show = self.items[:self.max_items]
 
@@ -104,11 +89,9 @@ class RcloneExplorer:
             if start_row + i >= height - 1:
                 break
 
-            # Format the line
             prefix = "📁 " if item.is_dir else "📄 "
             size_str = self.format_size(item.size) if not item.is_dir else "<DIR>"
 
-            # Truncate name if too long
             max_name_len = width - len(prefix) - len(size_str) - 10
             name = item.name
             if len(name) > max_name_len:
@@ -116,7 +99,6 @@ class RcloneExplorer:
 
             line = f"{prefix}{name:<{max_name_len}} {size_str:>10}"
 
-            # Highlight selected item
             attr = curses.A_REVERSE if i == self.selected_index else curses.A_NORMAL
 
             try:
@@ -124,7 +106,6 @@ class RcloneExplorer:
             except curses.error:
                 pass
 
-        # Show "more items" indicator
         if len(self.items) > self.max_items:
             more_text = f"... ({len(self.items) - self.max_items} more items)"
             try:
@@ -135,63 +116,51 @@ class RcloneExplorer:
         stdscr.refresh()
 
     def navigate_to(self, path: str):
-        """Navigate to a specific path"""
         self.current_path = path
         self.items = self.get_remote_items(path)
         self.selected_index = 0
 
     def go_back(self):
-        """Go back to previous directory"""
         if self.path_stack:
             previous_path = self.path_stack.pop()
             self.navigate_to(previous_path)
 
     def enter_selected(self):
-        """Enter the selected directory"""
         if not self.items or self.selected_index >= len(self.items):
             return
 
         selected_item = self.items[self.selected_index]
 
-        # Only navigate into directories
         if selected_item.is_dir:
-            # Save current path to stack
             self.path_stack.append(self.current_path)
-
-            # Navigate to new path
             new_path = f"{self.current_path}/{selected_item.name}" if self.current_path else selected_item.name
-            new_path = new_path.lstrip("/")    # Remove leading slash
+            new_path = new_path.lstrip("/")
             self.navigate_to(new_path)
 
     def run(self, stdscr):
-        """Main application loop"""
-        # Setup curses
-        curses.curs_set(0)    # Hide cursor
+        curses.curs_set(0)
         stdscr.keypad(True)
 
-        # Load initial items
         self.navigate_to("")
 
         while True:
             self.draw_screen(stdscr)
 
-            # Get user input
             key = stdscr.getch()
 
-            if key == ord('q') or key == 27:    # 'q' or ESC
+            if key == ord('q') or key == 27:
                 break
-            elif key == ord('b') and self.path_stack:    # 'b' for back
+            elif key == ord('b') and self.path_stack:
                 self.go_back()
             elif key == curses.KEY_UP and self.selected_index > 0:
                 self.selected_index -= 1
             elif key == curses.KEY_DOWN and self.selected_index < min(len(self.items) - 1, self.max_items - 1):
                 self.selected_index += 1
-            elif key == curses.KEY_ENTER or key == 10 or key == 13:    # Enter
+            elif key == curses.KEY_ENTER or key == 10 or key == 13:
                 self.enter_selected()
 
 
 def check_rclone() -> bool:
-    """Check if rclone is available"""
     try:
         subprocess.run(["rclone", "version"], capture_output=True, check=True)
         return True
@@ -200,7 +169,6 @@ def check_rclone() -> bool:
 
 
 def get_available_remotes() -> List[str]:
-    """Get list of available rclone remotes"""
     try:
         result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True, check=True)
         remotes = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
@@ -210,7 +178,6 @@ def get_available_remotes() -> List[str]:
 
 
 def select_remote_interactive() -> Optional[str]:
-    """Interactive remote selection using curses"""
     remotes = get_available_remotes()
 
     if not remotes:
@@ -226,21 +193,17 @@ def select_remote_interactive() -> Optional[str]:
             stdscr.clear()
             height, width = stdscr.getmaxyx()
 
-            # Title
             title = "Select rclone remote:"
             stdscr.addstr(0, 0, title, curses.A_BOLD)
 
-            # Instructions
             instructions = "Use arrow keys to navigate, ENTER to select, 'q' to quit"
             stdscr.addstr(1, 0, instructions)
 
-            # Remote list
             start_row = 3
             for i, remote in enumerate(remotes):
                 if start_row + i >= height - 1:
                     break
 
-                # Remove trailing colon for display
                 display_name = remote.rstrip(':')
                 attr = curses.A_REVERSE if i == selected_index else curses.A_NORMAL
 
@@ -251,27 +214,24 @@ def select_remote_interactive() -> Optional[str]:
 
             stdscr.refresh()
 
-            # Handle input
             key = stdscr.getch()
 
-            if key == ord('q') or key == 27:    # 'q' or ESC
+            if key == ord('q') or key == 27:
                 return None
             elif key == curses.KEY_UP and selected_index > 0:
                 selected_index -= 1
             elif key == curses.KEY_DOWN and selected_index < len(remotes) - 1:
                 selected_index += 1
-            elif key == curses.KEY_ENTER or key == 10 or key == 13:    # Enter
+            elif key == curses.KEY_ENTER or key == 10 or key == 13:
                 return remotes[selected_index]
 
     return curses.wrapper(remote_selector)
 
 
 def parse_remote_path(remote_arg: str) -> str:
-    """Parse and validate remote path argument"""
     if not remote_arg:
         raise ValueError("Remote path cannot be empty")
 
-    # Ensure it ends with colon if no path specified
     if ":" not in remote_arg:
         remote_arg += ":"
 
@@ -279,7 +239,6 @@ def parse_remote_path(remote_arg: str) -> str:
 
 
 def main():
-    """Main entry point"""
     parser = argparse.ArgumentParser(description="rclone explorer - An ncdu-like explorer for rclone storages",
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      epilog="""
@@ -304,13 +263,11 @@ Examples:
 
     args = parser.parse_args()
 
-    # Check if rclone is available
     if not check_rclone():
         print("Error: rclone command not found. Please install rclone first.", file=sys.stderr)
         sys.exit(1)
 
     try:
-        # If no remote provided, let user select interactively
         if args.remote is None:
             selected_remote = select_remote_interactive()
             if selected_remote is None:
