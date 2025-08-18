@@ -122,7 +122,7 @@ class RcloneExplorer:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Interactive rclone file explorer")
     parser.add_argument("remote", nargs="?", help="Remote name (e.g. 'myremote:')")
-    parser.add_argument("-n", "--max-items", type=int, default=10, help="Maximum items to display (default: 10)")
+    parser.add_argument("-n", "--max-items", type=int, default=100, help="Maximum items to display (default: 100)")
     args = parser.parse_args()
 
     if not rclone(["version"]):
