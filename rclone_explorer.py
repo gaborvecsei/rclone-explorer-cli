@@ -1,36 +1,51 @@
 #!/usr/bin/env python3
+import argparse
 import curses
 import json
 import subprocess
 import sys
-from contextlib import suppress
+from typing import Any, Dict, List
 
 
-def rclone(cmd, path=""):
-    with suppress(subprocess.CalledProcessError, json.JSONDecodeError):
+def rclone(cmd: List[str], path: str = "") -> str:
+    try:
         result = subprocess.run(["rclone"] + cmd + ([path] if path else []), capture_output=True, text=True, check=True)
         return result.stdout
+    except subprocess.CalledProcessError as e:
+        exit_error(
+            f"rclone command failed: {' '.join(['rclone'] + cmd + ([path] if path else []))}\nError: {e.stderr.strip() if e.stderr else str(e)}"
+        )
+    except json.JSONDecodeError as e:
+        exit_error(
+            f"Invalid JSON response from rclone command: {' '.join(['rclone'] + cmd + ([path] if path else []))}\nError: {str(e)}"
+        )
     return ""
 
 
-def exit_error(msg):
+def exit_error(msg: str) -> None:
     print(f"Error: {msg}", file=sys.stderr)
     sys.exit(1)
 
 
-def safe_addstr(stdscr, y, x, text, attr=0):
-    with suppress(curses.error):
+def safe_addstr(stdscr: Any, y: int, x: int, text: str, attr: int = 0) -> None:
+    try:
         stdscr.addstr(y, x, text, attr)
+    except curses.error:
+        # Silently ignore curses errors (e.g., trying to write outside terminal bounds)
+        pass
 
 
 class RcloneExplorer:
 
-    def __init__(self, remote_path, max_items=10):
-        self.remote_path, self.max_items = remote_path, max_items
-        self.current_path, self.selected_index = "", 0
-        self.items, self.path_stack = [], []
+    def __init__(self, remote_path: str, max_items: int = 10) -> None:
+        self.remote_path: str = remote_path
+        self.max_items: int = max_items
+        self.current_path: str = ""
+        self.selected_index: int = 0
+        self.items: List[Dict[str, Any]] = []
+        self.path_stack: List[str] = []
 
-    def get_items(self, path=""):
+    def get_items(self, path: str = "") -> List[Dict[str, Any]]:
         full_path = f"{self.remote_path}{path}" if path else self.remote_path
         data = rclone(["lsjson"], full_path)
         if data:
@@ -39,15 +54,16 @@ class RcloneExplorer:
             return items
         return []
 
-    def format_size(self, size):
+    def format_size(self, size: int) -> str:
         if size == 0:
             return "0 B"
         for i, unit in enumerate(["B", "KB", "MB", "GB", "TB"]):
             if size < 1024**(i + 1) or i == 4:
                 s = size / (1024**i)
                 return f"{int(s)} {unit}" if i == 0 else f"{s:.1f} {unit}"
+        return "0 B"
 
-    def draw(self, stdscr):
+    def draw(self, stdscr: Any) -> None:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
 
@@ -75,11 +91,11 @@ class RcloneExplorer:
                         f"... ({len(self.items) - self.max_items} more)")
         stdscr.refresh()
 
-    def navigate(self, path):
+    def navigate(self, path: str) -> None:
         self.current_path, self.selected_index = path, 0
         self.items = self.get_items(path)
 
-    def run(self, stdscr):
+    def run(self, stdscr: Any) -> None:
         curses.curs_set(0)
         stdscr.keypad(True)
         self.navigate("")
@@ -103,11 +119,16 @@ class RcloneExplorer:
                     self.navigate(f"{self.current_path}/{item['Name']}".lstrip("/"))
 
 
-def main():
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Interactive rclone file explorer")
+    parser.add_argument("remote", nargs="?", help="Remote name (e.g. 'myremote:')")
+    parser.add_argument("-n", "--max-items", type=int, default=10, help="Maximum items to display (default: 10)")
+    args = parser.parse_args()
+
     if not rclone(["version"]):
         exit_error("rclone not found")
 
-    remote = sys.argv[1] if len(sys.argv) > 1 else None
+    remote = args.remote
     if not remote:
         data = rclone(["listremotes"])
         remotes = [line.strip() for line in data.splitlines() if line.strip()] if data else []
@@ -126,7 +147,7 @@ def main():
         remote += ":"
 
     try:
-        curses.wrapper(RcloneExplorer(remote).run)
+        curses.wrapper(RcloneExplorer(remote, args.max_items).run)
     except KeyboardInterrupt:
         print("\nExiting...")
     except Exception as e:
