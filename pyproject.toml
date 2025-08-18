@@ -1,0 +1,12 @@
+[project]
+name = "rclone-explorer"
+version = "1.0.0"
+description = "Interactive CLI for browsing rclone remotes"
+requires-python = ">=3.6"
+
+[project.scripts]
+rclone-explorer = "rclone_explorer:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
