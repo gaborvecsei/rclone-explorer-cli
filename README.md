@@ -23,25 +23,25 @@ I needed a lightweight tool with which I can easily browse my configured remotes
 ### Run directly with uvx (no installation needed)
 
 ```bash
-# Run from GitHub - replace with your actual repo URL
-uvx --from git+https://github.com/yourusername/rclone_explorer.git rclone-explorer --help
+# Run from GitHub
+uvx --from git+https://github.com/gaborvecsei/rclone-explorer-cli.git rclone-explorer my_remote:
 
 # With options
-uvx --from git+https://github.com/yourusername/rclone_explorer.git rclone-explorer --max-items 20 my_remote:/my/path
+uvx --from git+https://github.com/gaborvecsei/rclone-explorer-cli.git rclone-explorer --max-items 20 my_remote:
 ```
 
 ### Install globally with uv
 
 ```bash
-uv tool install git+https://github.com/yourusername/rclone_explorer.git
+uv tool install git+https://github.com/gaborvecsei/rclone-explorer-cli.git
 
 # Then run anywhere
-rclone-explorer --help
+rclone-explorer my_remote:
 ```
 
 ### Direct script usage
 
 ```bash
-./rclone_explorer.py --help
+./rclone_explorer.py my_remote:
 ```
 
